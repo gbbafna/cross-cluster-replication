@@ -56,6 +56,7 @@ abstract class CrossClusterReplicationTask(id: Long, type: String, action: Strin
                                            protected val replicationSettings: ReplicationSettings) :
     AllocatedPersistentTask(id, type, action, description, parentTask, headers) {
 
+
     private val overallTaskScope = CoroutineScope(threadPool.coroutineContext(executor))
     protected abstract val log : Logger
     protected abstract val followerIndexName: String

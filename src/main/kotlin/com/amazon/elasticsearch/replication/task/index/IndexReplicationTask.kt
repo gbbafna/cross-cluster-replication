@@ -98,7 +98,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import kotlin.streams.toList
 
-class IndexReplicationTask(id: Long, type: String, action: String, description: String,
+open class IndexReplicationTask(id: Long, type: String, action: String, description: String,
                            parentTask: TaskId,
                            executor: String,
                            clusterService: ClusterService,
@@ -112,6 +112,7 @@ class IndexReplicationTask(id: Long, type: String, action: String, description: 
     : CrossClusterReplicationTask(id, type, action, description, parentTask, emptyMap(), executor,
                                   clusterService, threadPool, client, replicationMetadataManager, replicationSettings), ClusterStateListener
     {
+
     private lateinit var currentTaskState : IndexReplicationState
     private lateinit var followingTaskState : IndexReplicationState
 
@@ -154,7 +155,7 @@ class IndexReplicationTask(id: Long, type: String, action: String, description: 
 
     override fun indicesOrShards(): List<Any> = listOf(followerIndexName)
 
-    override suspend fun execute(scope: CoroutineScope, initialState: PersistentTaskState?) {
+    public override suspend fun execute(scope: CoroutineScope, initialState: PersistentTaskState?) {
         checkNotNull(initialState) { "Missing initial state" }
         followingTaskState = FollowingState(emptyMap())
         currentTaskState = initialState as IndexReplicationState
@@ -682,7 +683,7 @@ class IndexReplicationTask(id: Long, type: String, action: String, description: 
         client.suspending(client.admin().indices()::delete, defaultContext = true)(DeleteIndexRequest(followerIndexName))
     }
 
-    private suspend fun setupAndStartRestore(): IndexReplicationState {
+    protected open suspend fun setupAndStartRestore(): IndexReplicationState {
         // Enable translog based fetch on the leader(remote) cluster
         val remoteClient = client.getRemoteClusterClient(remoteCluster)
         val settingsBuilder = Settings.builder().put(INDEX_TRANSLOG_RETENTION_LEASE_PRUNING_ENABLED_SETTING.key, true)
@@ -824,5 +825,17 @@ class IndexReplicationTask(id: Long, type: String, action: String, description: 
 
     data class MetadataUpdate(val updateSettingsRequest: UpdateSettingsRequest?, val aliasReq: IndicesAliasesRequest?, val staticUpdated: Boolean) {
 
+    }
+}
+
+open class Dependency1(val value1: Int)
+open class Dependency2(val value2: String)
+
+class SystemUnderTest(
+        val dependency1: Dependency1,
+        val dependency2: Dependency2) {
+
+    fun calculate(): Int {
+        return dependency1.value1 + dependency2.value2.toInt()
     }
 }

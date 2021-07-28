@@ -4,7 +4,14 @@ import com.amazon.elasticsearch.replication.ReplicationException
 import com.amazon.elasticsearch.replication.action.replicationstatedetails.UpdateReplicationStateAction
 import com.amazon.elasticsearch.replication.action.replicationstatedetails.UpdateReplicationStateDetailsRequest
 import com.amazon.elasticsearch.replication.metadata.state.REPLICATION_LAST_KNOWN_OVERALL_STATE
-import com.amazon.elasticsearch.replication.metadata.store.*
+import com.amazon.elasticsearch.replication.metadata.store.AddReplicationMetadataRequest
+import com.amazon.elasticsearch.replication.metadata.store.DeleteReplicationMetadataRequest
+import com.amazon.elasticsearch.replication.metadata.store.GetReplicationMetadataRequest
+import com.amazon.elasticsearch.replication.metadata.store.ReplicationContext
+import com.amazon.elasticsearch.replication.metadata.store.ReplicationMetadata
+import com.amazon.elasticsearch.replication.metadata.store.ReplicationMetadataStore
+import com.amazon.elasticsearch.replication.metadata.store.ReplicationStoreMetadataType
+import com.amazon.elasticsearch.replication.metadata.store.UpdateReplicationMetadataRequest
 import com.amazon.elasticsearch.replication.repository.RemoteClusterRepository
 import com.amazon.elasticsearch.replication.util.overrideFgacRole
 import com.amazon.elasticsearch.replication.util.suspendExecute
@@ -17,7 +24,7 @@ import org.elasticsearch.common.inject.Singleton
 import org.elasticsearch.common.settings.Settings
 
 @Singleton
-class ReplicationMetadataManager constructor(private val clusterService: ClusterService,
+open class ReplicationMetadataManager constructor(private val clusterService: ClusterService,
                                              private val client: Client,
                                              private val replicaionMetadataStore: ReplicationMetadataStore) {
 

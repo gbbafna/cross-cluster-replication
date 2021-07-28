@@ -24,12 +24,14 @@ import java.util.stream.Collectors
 plugins {
     id "elasticsearch.esplugin" version "7.10.2"
     id 'org.jetbrains.kotlin.jvm' version "1.3.72"
+    //id 'org.jetbrains.kotlin.jvm' version "1.4.31"
 }
 
 group = "com.amazon.es"
 version = "${version}.0"
 
 ext.kotlin_version = '1.3.72'
+//ext.kotlin_version = '1.4.31'
 repositories {
     mavenCentral()
 }
@@ -46,19 +48,72 @@ dependencies {
     compile "org.jetbrains:annotations:13.0"
     compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.5"
     compile "com.amazon.opendistroforelasticsearch:common-utils:${version}"
+    //ToDo Fix
+    compile "io.mockk:mockk:1.10.4"
+
 
     testImplementation "org.assertj:assertj-core:3.17.2"
     testImplementation "org.elasticsearch.client:elasticsearch-rest-high-level-client:${versions.elasticsearch}"
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.3.5"
+   // testImplementation "io.mockk:mockk:1.10.4"
 }
 
 // Elasticsearch nanny state forces us to manually resolve all conflicts
 configurations.all {
+    project.logger.lifecycle("here 2")
     if (it.state != Configuration.State.UNRESOLVED) return
     resolutionStrategy {
         force "org.jetbrains.kotlin:kotlin-stdlib:${kotlin_version}"
         force "org.jetbrains.kotlin:kotlin-stdlib-common:${kotlin_version}"
+
+        capabilitiesResolution.withCapability("org.objenesis", "objenesis") {
+            project.logger.lifecycle("here 3")
+            def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'securemock' }
+            project.logger.lifecycle("to be selected ", toBeSelected)
+            if (toBeSelected != null) {
+                select(toBeSelected)
+            } else {
+                project.logger.lifecycle('nothing found')
+            }
+            because 'use securemock in place of objenesis'
+        }
+
+
+        capabilitiesResolution.withCapability("io.mockk", "mockk-dsl") {
+            project.logger.lifecycle("4here")
+            def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'mockk-dsl' }
+            if (toBeSelected != null) {
+                select(toBeSelected)
+            }
+            because 'use mockk in place of mockk'
+        }
     }
+
+    project.logger.lifecycle("e5here")
+    resolutionStrategy.capabilitiesResolution.withCapability("io.mockk", "mockk-dsl") {
+        project.logger.lifecycle("e4here")
+        def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'mockk-dsl' }
+        if (toBeSelected != null) {
+            select(toBeSelected)
+        }
+        because 'use mockk in place of mockk'
+    }
+
+//    class: org.objenesis.ObjenesisHelper
+    //    jar1: /Users/gbbafna/.gradle/caches/modules-2/files-2.1/org.elasticsearch/securemock/1.2/98201d4ad5ac93f6b415ae9172d52b5e7cda490e/securemock-1.2.jar
+//    jar2: /Users/gbbafna/.gradle/caches/modules-2/files-2.1/org.objenesis/objenesis/3.1/48f12deaae83a8dfc3775d830c9fd60ea59bbbca/objenesis-3.1.jar
+    //it.exclude("org.objenesis")
+
+//    resolutionStrategy.capabilitiesResolution.withCapability("log4j:log4j") {
+//        def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'log4j-over-slf4j' }
+//        if (toBeSelected != null) {
+//            select(toBeSelected)
+//        }
+//        because 'use slf4j in place of log4j'
+//    }
+
+    //runtime.exclude group: "org.objenesis", module: "objenesis"
+    //exclude(group = "org.objenesis", module = "objenesis")
 }
 
 compileKotlin {
