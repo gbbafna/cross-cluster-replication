@@ -24,6 +24,7 @@ import com.amazon.elasticsearch.replication.util.persistentTasksService
 import org.apache.logging.log4j.LogManager
 import org.elasticsearch.client.Client
 import org.elasticsearch.cluster.ClusterState
+import org.elasticsearch.cluster.ClusterStateObserver
 import org.elasticsearch.cluster.service.ClusterService
 import org.elasticsearch.common.settings.SettingsModule
 import org.elasticsearch.persistent.AllocatedPersistentTask
@@ -68,9 +69,10 @@ class IndexReplicationExecutor(executor: String, private val clusterService: Clu
     override fun createTask(id: Long, type: String, action: String, parentTaskId: TaskId,
                             taskInProgress: PersistentTask<IndexReplicationParams>,
                             headers: MutableMap<String, String>?): AllocatedPersistentTask {
+        val cso = ClusterStateObserver(clusterService, log, threadPool.threadContext)
         return IndexReplicationTask(id, type, action, getDescription(taskInProgress), parentTaskId,
                                     executor, clusterService, threadPool, client, requireNotNull(taskInProgress.params),
-                                    persistentTasksService, replicationMetadataManager, replicationSettings, settingsModule)
+                                    persistentTasksService, replicationMetadataManager, replicationSettings, settingsModule, cso)
     }
 
     override fun getDescription(taskInProgress: PersistentTask<IndexReplicationParams>): String {

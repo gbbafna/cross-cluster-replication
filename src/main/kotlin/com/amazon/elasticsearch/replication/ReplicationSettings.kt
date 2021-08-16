@@ -5,7 +5,7 @@ import org.elasticsearch.common.settings.ClusterSettings
 import org.elasticsearch.common.unit.ByteSizeValue
 import org.elasticsearch.common.unit.TimeValue
 
-class ReplicationSettings(clusterService: ClusterService) {
+open class ReplicationSettings(clusterService: ClusterService) {
 
     @Volatile var chunkSize = ReplicationPlugin.REPLICATION_FOLLOWER_RECOVERY_CHUNK_SIZE.get(clusterService.settings)
     @Volatile var concurrentFileChunks = ReplicationPlugin.REPLICATION_FOLLOWER_RECOVERY_PARALLEL_CHUNKS.get(clusterService.settings)

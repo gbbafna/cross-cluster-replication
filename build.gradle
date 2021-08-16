@@ -48,19 +48,17 @@ dependencies {
     compile "org.jetbrains:annotations:13.0"
     compile "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.5"
     compile "com.amazon.opendistroforelasticsearch:common-utils:${version}"
-    //ToDo Fix
+
     //compile("io.mockk:mockk:1.10.4") { }
 
 
     testImplementation "org.assertj:assertj-core:3.17.2"
     testImplementation "org.elasticsearch.client:elasticsearch-rest-high-level-client:${versions.elasticsearch}"
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.3.5"
-    compile("io.mockk:mockk:1.10.4") {
-        force = true
-        //exclude group: 'org.objenesis', module: 'objenesis'
-        transitive = true
-    }
+    //ToDo Fix
+    //compile("io.mockk:mockk:1.10.4")
    // testImplementation "io.mockk:mockk:1.10.4"
+    testImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0"
 }
 
 configurations.testCompile {
@@ -69,14 +67,12 @@ configurations.testCompile {
 
 // Elasticsearch nanny state forces us to manually resolve all conflicts
 configurations.all {
-    project.logger.lifecycle("here 2")
     if (it.state != Configuration.State.UNRESOLVED) return
     resolutionStrategy {
         force "org.jetbrains.kotlin:kotlin-stdlib:${kotlin_version}"
         force "org.jetbrains.kotlin:kotlin-stdlib-common:${kotlin_version}"
 
         capabilitiesResolution.withCapability("org.objenesis", "objenesis") {
-            project.logger.lifecycle("here 3")
             def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'securemock' }
             project.logger.lifecycle("to be selected ", toBeSelected)
             if (toBeSelected != null) {
@@ -89,7 +85,6 @@ configurations.all {
 
 
         capabilitiesResolution.withCapability("io.mockk", "mockk-dsl") {
-            project.logger.lifecycle("4here")
             def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'mockk-dsl' }
             if (toBeSelected != null) {
                 select(toBeSelected)
@@ -98,9 +93,7 @@ configurations.all {
         }
     }
 
-    project.logger.lifecycle("e5here")
     resolutionStrategy.capabilitiesResolution.withCapability("io.mockk", "mockk-dsl") {
-        project.logger.lifecycle("e4here")
         def toBeSelected = candidates.find { it.id instanceof ModuleComponentIdentifier && it.id.module == 'mockk-dsl' }
         if (toBeSelected != null) {
             select(toBeSelected)
@@ -167,6 +160,7 @@ test {
             suspend = false
         }
     }
+    //useJUnitPlatform()
 }
 
 // Setting RunTask.debug = true configures the JVM to use a debugger in listen mode (server=n,suspend=y).  This is a

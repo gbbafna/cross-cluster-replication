@@ -90,6 +90,7 @@ import org.elasticsearch.persistent.PersistentTasksCustomMetadata.PersistentTask
 import org.elasticsearch.persistent.PersistentTasksNodeService
 import org.elasticsearch.persistent.PersistentTasksService
 import org.elasticsearch.tasks.TaskId
+import org.elasticsearch.tasks.TaskManager
 import org.elasticsearch.threadpool.ThreadPool
 import java.util.function.Predicate
 import java.util.stream.Collectors
@@ -108,7 +109,8 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
                            private val persistentTasksService: PersistentTasksService,
                            replicationMetadataManager: ReplicationMetadataManager,
                            replicationSettings: ReplicationSettings,
-                           val settingsModule: SettingsModule)
+                           val settingsModule: SettingsModule,
+                           val cso: ClusterStateObserver )
     : CrossClusterReplicationTask(id, type, action, description, parentTask, emptyMap(), executor,
                                   clusterService, threadPool, client, replicationMetadataManager, replicationSettings), ClusterStateListener
     {
@@ -123,7 +125,7 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
     override val followerIndexName = params.followerIndexName
 
     override val log = Loggers.getLogger(javaClass, Index(params.followerIndexName, ClusterState.UNKNOWN_UUID))
-    private val cso = ClusterStateObserver(clusterService, log, threadPool.threadContext)
+    //private val cso = ClusterStateObserver(clusterService, log, threadPool.threadContext)
     private val retentionLeaseHelper = RemoteClusterRetentionLeaseHelper(clusterService.clusterName.value(), remoteClient)
 
     private var shouldCallEvalMonitoring = true
@@ -152,6 +154,11 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
         const val SLEEP_TIME_BETWEEN_POLL_MS = 5000L
     }
 
+        //only for testing
+        fun setPersistent(taskManager: TaskManager) {
+            super.init(persistentTasksService, taskManager, "persistentTaskId", allocationId)
+    }
+
 
     override fun indicesOrShards(): List<Any> = listOf(followerIndexName)
 
@@ -167,7 +174,10 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
                         log.debug("Resuming tasks now.")
                         InitFollowState
                     } else {
+                        var ns = notSuspend()
+                        SuspendF()
                         setupAndStartRestore()
+
                     }
                 }
                 ReplicationState.RESTORING -> {
@@ -228,6 +238,15 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
             if (isCompleted) break
         }
     }
+
+        open fun notSuspend() : String {
+            return  "1"
+        }
+
+        open suspend fun SuspendF() : String {
+            return "1"
+        }
+
 
     private suspend fun failReplication(failedState: FailedState) {
         withContext(NonCancellable) {
@@ -683,12 +702,16 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
         client.suspending(client.admin().indices()::delete, defaultContext = true)(DeleteIndexRequest(followerIndexName))
     }
 
-    protected open suspend fun setupAndStartRestore(): IndexReplicationState {
+    open suspend fun setupAndStartRestore(): IndexReplicationState {
         // Enable translog based fetch on the leader(remote) cluster
         val remoteClient = client.getRemoteClusterClient(remoteCluster)
         val settingsBuilder = Settings.builder().put(INDEX_TRANSLOG_RETENTION_LEASE_PRUNING_ENABLED_SETTING.key, true)
         val updateSettingsRequest = remoteClient.admin().indices().prepareUpdateSettings().setSettings(settingsBuilder).setIndices(remoteIndex.name).request()
-        val updateResponse = remoteClient.suspending(remoteClient.admin().indices()::updateSettings, injectSecurityContext = true)(updateSettingsRequest)
+        //val updateResponse2 = remoteClient.suspending(remoteClient.admin().indices()::updateSettings, injectSecurityContext = true)(updateSettingsRequest)
+
+        val updateResponse = remoteClient.admin().indices().updateSettings(updateSettingsRequest).actionGet()
+        //log.info("${updateResponse2.actionGet().isAcknowledged} is done")
+
         if(!updateResponse.isAcknowledged) {
             log.error("Unable to update setting for translog pruning based on retention lease")
         }

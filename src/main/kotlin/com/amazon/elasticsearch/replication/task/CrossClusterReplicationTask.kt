@@ -19,10 +19,10 @@ import com.amazon.elasticsearch.replication.ReplicationSettings
 import com.amazon.elasticsearch.replication.metadata.ReplicationMetadataManager
 import com.amazon.elasticsearch.replication.metadata.store.ReplicationMetadata
 import com.amazon.elasticsearch.replication.task.autofollow.AutoFollowTask
-import com.amazon.elasticsearch.replication.util.coroutineContext
 import com.amazon.elasticsearch.replication.util.suspending
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
@@ -51,13 +51,14 @@ abstract class CrossClusterReplicationTask(id: Long, type: String, action: Strin
                                            protected val executor: String,
                                            protected val clusterService: ClusterService,
                                            protected val threadPool: ThreadPool,
-                                           protected val client: Client,
+                                           val client: Client,
                                            protected val replicationMetadataManager: ReplicationMetadataManager,
                                            protected val replicationSettings: ReplicationSettings) :
     AllocatedPersistentTask(id, type, action, description, parentTask, headers) {
 
 
-    private val overallTaskScope = CoroutineScope(threadPool.coroutineContext(executor))
+    //private val overallTaskScope = CoroutineScope(threadPool.coroutineContext(executor))
+    private val overallTaskScope = GlobalScope
     protected abstract val log : Logger
     protected abstract val followerIndexName: String
     protected abstract val remoteCluster: String
@@ -189,6 +190,12 @@ abstract class CrossClusterReplicationTask(id: Long, type: String, action: Strin
             replicationMetadataManager.getIndexReplicationMetadata(followerIndexName, fetch_from_primary = true)
         }
     }
+
+    open suspend fun setReplicationMetadata(rm :ReplicationMetadata) {
+        replicationMetadata = rm
+
+    }
+
 
     open class CrossClusterReplicationTaskResponse(val status: String): ActionResponse(), ToXContentObject {
         override fun writeTo(out: StreamOutput) {

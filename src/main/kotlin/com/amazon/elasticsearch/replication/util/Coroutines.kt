@@ -16,7 +16,11 @@
 package com.amazon.elasticsearch.replication.util
 
 import com.amazon.elasticsearch.replication.metadata.store.ReplicationMetadata
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ThreadContextElement
+import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.elasticsearch.ElasticsearchTimeoutException
 import org.elasticsearch.ExceptionsHelper
 import org.elasticsearch.action.ActionListener
@@ -27,7 +31,12 @@ import org.elasticsearch.action.support.master.AcknowledgedRequest
 import org.elasticsearch.action.support.master.MasterNodeRequest
 import org.elasticsearch.client.Client
 import org.elasticsearch.client.ElasticsearchClient
-import org.elasticsearch.cluster.*
+import org.elasticsearch.cluster.AckedClusterStateUpdateTask
+import org.elasticsearch.cluster.ClusterState
+import org.elasticsearch.cluster.ClusterStateObserver
+import org.elasticsearch.cluster.ClusterStateTaskConfig
+import org.elasticsearch.cluster.ClusterStateTaskExecutor
+import org.elasticsearch.cluster.ClusterStateTaskListener
 import org.elasticsearch.cluster.service.ClusterService
 import org.elasticsearch.common.Priority
 import org.elasticsearch.common.unit.TimeValue
@@ -39,7 +48,11 @@ import org.elasticsearch.persistent.PersistentTasksCustomMetadata.PersistentTask
 import org.elasticsearch.persistent.PersistentTasksService
 import org.elasticsearch.threadpool.ThreadPool
 import java.util.concurrent.TimeoutException
-import kotlin.coroutines.*
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 /**
  * Converts methods that take an ActionListener callback into a suspending function. Any method in [Client] that takes
@@ -237,8 +250,8 @@ fun ThreadPool.coroutineContext(replicationMetadata: ReplicationMetadata?, actio
 /**
  * Captures the current Elastic [ThreadContext] in the coroutine context as well as sets the given executor as the dispatcher
  */
-fun ThreadPool.coroutineContext(executorName: String) : CoroutineContext =
-    executor(executorName).asCoroutineDispatcher() + coroutineContext()
+fun ThreadPool.coroutineContext(executorName: String) : CoroutineContext = coroutineContext()
+    //executor(executorName).asCoroutineDispatcher() + coroutineContext()
 
 suspend fun <T : MasterNodeRequest<T>> submitClusterStateUpdateTask(request: AcknowledgedRequest<T>,
                                                                     taskExecutor: ClusterStateTaskExecutor<AcknowledgedRequest<T>>,
