@@ -100,17 +100,16 @@ import kotlin.coroutines.suspendCoroutine
 import kotlin.streams.toList
 
 open class IndexReplicationTask(id: Long, type: String, action: String, description: String,
-                           parentTask: TaskId,
-                           executor: String,
-                           clusterService: ClusterService,
-                           threadPool: ThreadPool,
-                           client: Client,
-                           params: IndexReplicationParams,
-                           private val persistentTasksService: PersistentTasksService,
-                           replicationMetadataManager: ReplicationMetadataManager,
-                           replicationSettings: ReplicationSettings,
-                           val settingsModule: SettingsModule,
-                           val cso: ClusterStateObserver)
+                                parentTask: TaskId,
+                                executor: String,
+                                clusterService: ClusterService,
+                                threadPool: ThreadPool,
+                                client: Client,
+                                params: IndexReplicationParams,
+                                private val persistentTasksService: PersistentTasksService,
+                                replicationMetadataManager: ReplicationMetadataManager,
+                                replicationSettings: ReplicationSettings,
+                                val settingsModule: SettingsModule)
     : CrossClusterReplicationTask(id, type, action, description, parentTask, emptyMap(), executor,
                                   clusterService, threadPool, client, replicationMetadataManager, replicationSettings), ClusterStateListener
     {
@@ -743,6 +742,7 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
             }
             return FollowingState(emptyMap())
         }
+        val cso = ClusterStateObserver(clusterService, IndexReplicationExecutor.log, threadPool.threadContext)
         cso.waitForNextChange("remote restore start") { inProgressRestore(it) != null }
         return RestoreState
     }
@@ -753,7 +753,8 @@ open class IndexReplicationTask(id: Long, type: String, action: String, descript
         // Waiting for snapshot restore to reach a terminal stage.
         while (restore != null && restore.state() != RestoreInProgress.State.FAILURE && restore.state() != RestoreInProgress.State.SUCCESS) {
             try {
-                cso.waitForNextChange("remote restore finish")
+                var cso = ClusterStateObserver(clusterService, IndexReplicationExecutor.log, threadPool.threadContext)
+                cso.waitForNextChange("remote restore finish") { inProgressRestore(it) == null }
             } catch(e: OpenSearchTimeoutException) {
                 log.info("Timed out while waiting for restore to complete.")
             }

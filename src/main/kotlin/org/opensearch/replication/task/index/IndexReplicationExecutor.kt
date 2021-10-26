@@ -65,10 +65,9 @@ class IndexReplicationExecutor(executor: String, private val clusterService: Clu
     override fun createTask(id: Long, type: String, action: String, parentTaskId: TaskId,
                             taskInProgress: PersistentTask<IndexReplicationParams>,
                             headers: MutableMap<String, String>?): AllocatedPersistentTask {
-        val cso = ClusterStateObserver(clusterService, log, threadPool.threadContext)
         return IndexReplicationTask(id, type, action, getDescription(taskInProgress), parentTaskId,
                                     executor, clusterService, threadPool, client, requireNotNull(taskInProgress.params),
-                                    persistentTasksService, replicationMetadataManager, replicationSettings, settingsModule, cso)
+                                    persistentTasksService, replicationMetadataManager, replicationSettings, settingsModule)
     }
 
     override fun getDescription(taskInProgress: PersistentTask<IndexReplicationParams>): String {

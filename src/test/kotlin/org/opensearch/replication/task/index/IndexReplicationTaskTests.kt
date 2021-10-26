@@ -181,7 +181,7 @@ class IndexReplicationTaskTests : OpenSearchTestCase()  {
         val cso = ClusterStateObserver(clusterService, logger, threadPool.threadContext)
         val indexReplicationTask = IndexReplicationTask(1, "type", "action", "description" , EMPTY_TASK_ID,
                 ReplicationPlugin.REPLICATION_EXECUTOR_NAME_FOLLOWER, clusterService , threadPool, spyClient, IndexReplicationParams(connectionName, Index(followerIndex, "0"), followerIndex),
-                persist, replicationMetadataManager, replicationSettings, settingsModule,cso)
+                persist, replicationMetadataManager, replicationSettings, settingsModule)
 
         return indexReplicationTask
     }
