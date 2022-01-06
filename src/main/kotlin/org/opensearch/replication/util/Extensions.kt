@@ -11,15 +11,9 @@
 
 package org.opensearch.replication.util
 
-import org.opensearch.replication.repository.RemoteClusterRepository
-import org.opensearch.replication.metadata.store.ReplicationContext
-import org.opensearch.replication.metadata.store.ReplicationMetadata
-import org.opensearch.commons.authuser.User
 import kotlinx.coroutines.delay
 import org.apache.logging.log4j.Logger
 import org.opensearch.OpenSearchException
-import org.opensearch.OpenSearchSecurityException
-import org.opensearch.ResourceNotFoundException
 import org.opensearch.action.ActionListener
 import org.opensearch.action.ActionRequest
 import org.opensearch.action.ActionResponse
@@ -29,12 +23,14 @@ import org.opensearch.action.index.IndexResponse
 import org.opensearch.action.support.TransportActions
 import org.opensearch.client.Client
 import org.opensearch.common.util.concurrent.ThreadContext
+import org.opensearch.commons.authuser.User
 import org.opensearch.index.IndexNotFoundException
 import org.opensearch.index.shard.ShardId
 import org.opensearch.index.store.Store
 import org.opensearch.indices.recovery.RecoveryState
-import org.opensearch.replication.ReplicationException
-import org.opensearch.replication.util.stackTraceToString
+import org.opensearch.replication.metadata.store.ReplicationContext
+import org.opensearch.replication.metadata.store.ReplicationMetadata
+import org.opensearch.replication.repository.RemoteClusterRepository
 import org.opensearch.repositories.IndexId
 import org.opensearch.rest.RestStatus
 import org.opensearch.snapshots.SnapshotId
@@ -57,7 +53,7 @@ fun Store.performOp(tryBlock: () -> Unit, finalBlock: () -> Unit = {}) {
     }
 }
 
-fun <T: ActionResponse>Client.execute(replMetadata: ReplicationMetadata, actionType: ActionType<T>,
+fun <T: ActionResponse>Client.execute(replMetadata: ReplicationMetadata?, actionType: ActionType<T>,
                                       actionRequest: ActionRequest, timeout: Long): T {
     var storedContext: ThreadContext.StoredContext? = null
     try {
@@ -68,6 +64,7 @@ fun <T: ActionResponse>Client.execute(replMetadata: ReplicationMetadata, actionT
         storedContext?.restore()
     }
 }
+
 
 fun <T>Client.executeBlockUnderSecurityContext(replContext: ReplicationContext, block: () -> T): T {
     var storedContext: ThreadContext.StoredContext? = null

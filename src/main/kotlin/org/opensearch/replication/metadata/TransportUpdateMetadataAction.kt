@@ -36,8 +36,15 @@ import org.opensearch.cluster.ack.ClusterStateUpdateResponse
 import org.opensearch.cluster.ack.OpenIndexClusterStateUpdateResponse
 import org.opensearch.cluster.block.ClusterBlockException
 import org.opensearch.cluster.block.ClusterBlockLevel
-import org.opensearch.cluster.metadata.*
+import org.opensearch.cluster.metadata.AliasAction
 import org.opensearch.cluster.metadata.AliasAction.RemoveIndex
+import org.opensearch.cluster.metadata.IndexAbstraction
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver
+import org.opensearch.cluster.metadata.Metadata
+import org.opensearch.cluster.metadata.MetadataIndexAliasesService
+import org.opensearch.cluster.metadata.MetadataIndexStateService
+import org.opensearch.cluster.metadata.MetadataMappingService
+import org.opensearch.cluster.metadata.MetadataUpdateSettingsService
 import org.opensearch.cluster.service.ClusterService
 import org.opensearch.common.inject.Inject
 import org.opensearch.common.io.stream.StreamInput

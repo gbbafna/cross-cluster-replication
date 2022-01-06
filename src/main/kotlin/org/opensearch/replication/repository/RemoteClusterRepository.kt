@@ -11,22 +11,10 @@
 
 package org.opensearch.replication.repository
 
-import org.opensearch.replication.ReplicationPlugin
-import org.opensearch.replication.ReplicationSettings
-import org.opensearch.replication.action.repository.GetStoreMetadataAction
-import org.opensearch.replication.action.repository.GetStoreMetadataRequest
-import org.opensearch.replication.action.repository.ReleaseLeaderResourcesAction
-import org.opensearch.replication.action.repository.ReleaseLeaderResourcesRequest
-import org.opensearch.replication.util.restoreShardWithRetries
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import org.opensearch.replication.metadata.ReplicationMetadataManager
-import org.opensearch.replication.metadata.store.ReplicationMetadata
-import org.opensearch.replication.util.coroutineContext
-import org.opensearch.replication.util.execute
-import org.opensearch.replication.util.suspendExecute
-import kotlinx.coroutines.Dispatchers
 import org.apache.logging.log4j.LogManager
 import org.apache.lucene.index.IndexCommit
 import org.opensearch.Version
@@ -56,8 +44,20 @@ import org.opensearch.index.snapshots.IndexShardSnapshotStatus
 import org.opensearch.index.store.Store
 import org.opensearch.indices.recovery.RecoverySettings
 import org.opensearch.indices.recovery.RecoveryState
+import org.opensearch.replication.ReplicationPlugin
 import org.opensearch.replication.ReplicationPlugin.Companion.REPLICATION_INDEX_TRANSLOG_PRUNING_ENABLED_SETTING
+import org.opensearch.replication.ReplicationSettings
+import org.opensearch.replication.action.repository.GetStoreMetadataAction
+import org.opensearch.replication.action.repository.GetStoreMetadataRequest
+import org.opensearch.replication.action.repository.ReleaseLeaderResourcesAction
+import org.opensearch.replication.action.repository.ReleaseLeaderResourcesRequest
+import org.opensearch.replication.metadata.ReplicationMetadataManager
+import org.opensearch.replication.metadata.store.ReplicationMetadata
+import org.opensearch.replication.util.coroutineContext
+import org.opensearch.replication.util.execute
+import org.opensearch.replication.util.restoreShardWithRetries
 import org.opensearch.replication.util.stackTraceToString
+import org.opensearch.replication.util.suspendExecute
 import org.opensearch.repositories.IndexId
 import org.opensearch.repositories.Repository
 import org.opensearch.repositories.RepositoryData
@@ -69,7 +69,7 @@ import org.opensearch.snapshots.SnapshotState
 import org.opensearch.transport.ConnectTransportException
 import org.opensearch.transport.NodeDisconnectedException
 import org.opensearch.transport.NodeNotConnectedException
-import java.util.UUID
+import java.util.*
 import java.util.function.Consumer
 import java.util.function.Function
 import kotlin.collections.ArrayList
@@ -214,16 +214,14 @@ class RemoteClusterRepository(private val repositoryMetadata: RepositoryMetadata
     override fun getSnapshotInfo(snapshotId: SnapshotId): SnapshotInfo {
         val leaderClusterState = getLeaderClusterState(false, false)
         assert(REMOTE_SNAPSHOT_NAME.equals(snapshotId.name), { "SnapshotName differs" })
-        val indices = leaderClusterState.metadata().indices().keys().map { x -> x.value }
-        return SnapshotInfo(snapshotId, indices, emptyList(), SnapshotState.SUCCESS, Version.CURRENT)
+        val metadata: Metadata = leaderClusterState.metadata()
+        val indices = metadata.indices().keys().map { x -> x.value }
+        return SnapshotInfo(snapshotId, indices, metadata.dataStreams().keys.toList(), SnapshotState.SUCCESS, Version.CURRENT)
     }
 
-    /*
-     * Step 3: Global metadata params are not passed in the restore workflow for this use-case
-     * TODO: Implement this after analysing all the use-cases
-     */
     override fun getSnapshotGlobalMetadata(snapshotId: SnapshotId): Metadata {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        val leaderClusterState = getLeaderClusterState(false, false)
+        return leaderClusterState.metadata()
     }
 
     /*
@@ -391,7 +389,13 @@ class RemoteClusterRepository(private val repositoryMetadata: RepositoryMetadata
                                                             actionRequest: ActionRequest,
                                                             followerIndex: String): T {
 
-        val replMetadata = getReplicationMetadata(followerIndex)
+        var replMetadata : ReplicationMetadata? = null
+        try {
+            replMetadata = getReplicationMetadata(followerIndex)
+        } catch (e: Exception) {
+            log.error("gbbafna metadata not found , okay for now")
+        }
+
         return leaderClusterClient.execute(replMetadata, actionType, actionRequest,
                 REMOTE_CLUSTER_REPO_REQ_TIMEOUT_IN_MILLI_SEC)
 

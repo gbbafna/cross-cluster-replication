@@ -11,15 +11,6 @@
 
 package org.opensearch.replication.task.autofollow
 
-import org.opensearch.replication.ReplicationSettings
-import org.opensearch.replication.action.index.ReplicateIndexAction
-import org.opensearch.replication.action.index.ReplicateIndexRequest
-import org.opensearch.replication.metadata.ReplicationMetadataManager
-import org.opensearch.replication.task.CrossClusterReplicationTask
-import org.opensearch.replication.task.ReplicationState
-import org.opensearch.replication.util.stackTraceToString
-import org.opensearch.replication.util.suspendExecute
-import org.opensearch.replication.util.suspending
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -28,20 +19,41 @@ import org.opensearch.OpenSearchSecurityException
 import org.opensearch.action.admin.indices.get.GetIndexRequest
 import org.opensearch.action.support.IndicesOptions
 import org.opensearch.client.Client
+import org.opensearch.cluster.ClusterState
+import org.opensearch.cluster.ClusterStateObserver
+import org.opensearch.cluster.RestoreInProgress
+import org.opensearch.cluster.metadata.DataStream
 import org.opensearch.cluster.service.ClusterService
 import org.opensearch.common.io.stream.StreamInput
 import org.opensearch.common.io.stream.StreamOutput
 import org.opensearch.common.logging.Loggers
+import org.opensearch.common.regex.Regex
 import org.opensearch.common.xcontent.ToXContent
 import org.opensearch.common.xcontent.XContentBuilder
 import org.opensearch.persistent.PersistentTaskState
 import org.opensearch.replication.ReplicationException
+import org.opensearch.replication.ReplicationSettings
+import org.opensearch.replication.action.index.ReplicateIndexAction
+import org.opensearch.replication.action.index.ReplicateIndexRequest
+import org.opensearch.replication.metadata.ReplicationMetadataManager
+import org.opensearch.replication.repository.REMOTE_SNAPSHOT_NAME
+import org.opensearch.replication.repository.RemoteClusterRepository
+import org.opensearch.replication.task.CrossClusterReplicationTask
+import org.opensearch.replication.task.ReplicationState
+import org.opensearch.replication.task.index.IndexReplicationExecutor
+import org.opensearch.replication.util.stackTraceToString
+import org.opensearch.replication.util.suspendExecute
+import org.opensearch.replication.util.suspending
+import org.opensearch.replication.util.waitForNextChange
 import org.opensearch.rest.RestStatus
 import org.opensearch.tasks.Task
 import org.opensearch.tasks.TaskId
 import org.opensearch.threadpool.Scheduler
 import org.opensearch.threadpool.ThreadPool
+import java.util.*
 import java.util.concurrent.ConcurrentSkipListSet
+import kotlin.collections.HashMap
+import kotlin.collections.set
 
 class AutoFollowTask(id: Long, type: String, action: String, description: String, parentTask: TaskId,
                      headers: Map<String, String>,
@@ -63,6 +75,7 @@ class AutoFollowTask(id: Long, type: String, action: String, description: String
     private var failedIndices = ConcurrentSkipListSet<String>() // Failed indices for replication from this autofollow task
     private var retryScheduler: Scheduler.ScheduledCancellable? = null
     lateinit var stat: AutoFollowStat
+    val cso = ClusterStateObserver(clusterService, IndexReplicationExecutor.log, threadPool.threadContext)
 
     override suspend fun execute(scope: CoroutineScope, initialState: PersistentTaskState?) {
         stat = AutoFollowStat(params.patternName, replicationMetadata.leaderContext.resource)
@@ -102,13 +115,13 @@ class AutoFollowTask(id: Long, type: String, action: String, description: String
     }
 
     private suspend fun autoFollow() {
-        log.debug("Checking $leaderAlias under pattern name $patternName for new indices to auto follow")
+        log.info("Checking $leaderAlias under pattern name $patternName for new indices to auto follow")
         val entry = replicationMetadata.leaderContext.resource
 
         // Fetch remote indices matching auto follow pattern
         var remoteIndices = Iterable { emptyArray<String>().iterator() }
+        val remoteClient = client.getRemoteClusterClient(leaderAlias)
         try {
-            val remoteClient = client.getRemoteClusterClient(leaderAlias)
             val indexReq = GetIndexRequest().features(*emptyArray())
                     .indices(entry)
                     .indicesOptions(IndicesOptions.lenientExpandOpen())
@@ -137,10 +150,73 @@ class AutoFollowTask(id: Long, type: String, action: String, description: String
 
         stat.failCounterForRun = 0
         for (newRemoteIndex in remoteIndices) {
-            startReplication(newRemoteIndex)
+            //ToDo skip datastreams
+            if (!newRemoteIndex.startsWith(".")){
+                startReplication(newRemoteIndex)
+            }
         }
+
+        val clusterStateRequest = remoteClient.admin().cluster().prepareState()
+                .clear()
+                .setMetadata(true)
+                .request()
+        val remoteState = remoteClient.suspending(remoteClient.admin().cluster()::state,
+                injectSecurityContext = true, defaultContext = true)(clusterStateRequest).state
+
+        val leaderDataStreams :HashMap<String, DataStream> = HashMap()
+        val followerDataStreams: HashSet<String> = HashSet()
+        for ((dataStreamName, ds) in remoteState.metadata().dataStreams()) {
+            if (Regex.simpleMatch(entry, dataStreamName)) {
+                leaderDataStreams[dataStreamName] = ds;
+            }
+        }
+        
+        for  (dataStreamName in clusterService.state().metadata().dataStreams().keys) {
+            followerDataStreams.add(dataStreamName)
+        }
+
+        try{
+            for (ds in leaderDataStreams) {
+                if (!followerDataStreams.contains(ds.key)) {
+                    // find the template used on leader
+                    // can the template change ?
+                    log.warn("gbbafna will start replication for ${ds}")
+
+                    val restoreRequest = client.admin().cluster()
+                            .prepareRestoreSnapshot(RemoteClusterRepository.repoForCluster(leaderAlias), REMOTE_SNAPSHOT_NAME)
+                            .setIndices(ds.key)
+                            .request()
+
+                    val response = client.suspending(client.admin().cluster()::restoreSnapshot, defaultContext = true)(restoreRequest)
+                    if (response.restoreInfo != null) {
+                        if (response.restoreInfo.failedShards() != 0) {
+                            throw ReplicationException("Restore failed: $response")
+                        }
+                        log.error("restpre failed")
+                    }
+                    cso.waitForNextChange("remote restore start") { inProgressRestore(it) != null }
+
+                } else {
+                    // Spawn a management job if it doesn't exist
+                    // For now do it here .
+                }
+            }
+
+        } catch (e: Exception){
+            log.info("Failed to restore  with error $e")
+
+        }
+
         stat.failCount = stat.failCounterForRun
     }
+
+    private fun inProgressRestore(cs: ClusterState): RestoreInProgress.Entry? {
+        return cs.custom<RestoreInProgress>(RestoreInProgress.TYPE).singleOrNull { entry ->
+            entry.snapshot().repository == RemoteClusterRepository.repoForCluster(leaderAlias) &&
+                    entry.indices().singleOrNull { idx -> idx == followerIndexName } != null
+        }
+    }
+
 
     private suspend fun startReplication(leaderIndex: String) {
         if (clusterService.state().metadata().hasIndex(leaderIndex)) {
